@@ -229,4 +229,4 @@ Button1 = {
 
 ### The Result
 
-![Discord Rich Presence](/etc/images/example.png)
+![Discord Rich Presence](/etc/assets/example.png)
