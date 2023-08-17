@@ -29,6 +29,11 @@ impl<'lua, T: FromLua<'lua>> FromLua<'lua> for Variable<T> {
 				}
 			},
 			"thread" => Self::Listen,
+			"function" => {
+				let fun = LuaFunction::from_lua(lua_value, lua)?;
+				let val = fun.call(())?;
+				Self::from_lua(val, lua)?
+			},
 			_ => Self::Static(T::from_lua(lua_value, lua)?),
 		})
 	}
@@ -40,6 +45,7 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 		name: &'static str,
 		data: String,
 		dofun: F,
+		#[cfg(feature = "unsafe")] safe: bool,
 	) -> Option<JoinHandle<()>> {
 		match self {
 			Self::Static(val) => {
@@ -47,7 +53,10 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 				None
 			},
 			Self::Poll(rate) => Some(thread::spawn(move || {
-				let lua = get_lua();
+				let lua = get_lua(
+					#[cfg(feature = "unsafe")]
+					safe,
+				);
 				lua.load(&data).exec().unwrap();
 				let fun: LuaFunction = lua
 					.globals()
@@ -62,7 +71,10 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 				}
 			})),
 			Self::Listen => Some(thread::spawn(move || {
-				let lua = get_lua();
+				let lua = get_lua(
+					#[cfg(feature = "unsafe")]
+					safe,
+				);
 				lua.load(&data).exec().unwrap();
 				let thread: LuaThread = lua.globals().get(name).unwrap();
 				loop {
@@ -76,6 +88,7 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 	}
 }
 
+#[cfg(not(feature = "unsafe"))]
 macro_rules! watchtype {
 	($var:ident, $ty:ty, $name:ident, $send:ident, $ctx:ident, $env:ident) => {
 		$env.get::<_, Variable<$ty>>($name)?
@@ -85,6 +98,7 @@ macro_rules! watchtype {
 	};
 }
 
+#[cfg(not(feature = "unsafe"))]
 pub fn create_watcher(
 	name: &'static str,
 	send: Sender<ActivityData>,
@@ -101,5 +115,40 @@ pub fn create_watcher(
 		ActivityDataTag::SecondButton => watchtype!(SecondButton, Button, name, send, ctx, env),
 		ActivityDataTag::LargeImage => watchtype!(LargeImage, Image, name, send, ctx, env),
 		ActivityDataTag::SmallImage => watchtype!(SmallImage, Image, name, send, ctx, env),
+	})
+}
+
+#[cfg(feature = "unsafe")]
+macro_rules! watchtype {
+	($var:ident, $ty:ty, $name:ident, $send:ident, $ctx:ident, $env:ident, $safe:ident) => {
+		$env.get::<_, Variable<$ty>>($name)?.watch(
+			$name,
+			$ctx.clone(),
+			move |val| $send.send(ActivityData::$var(val)).unwrap(),
+			$safe,
+		)
+	};
+}
+
+#[cfg(feature = "unsafe")]
+pub fn create_watcher(
+	name: &'static str,
+	send: Sender<ActivityData>,
+	ctx: &String,
+	env: &LuaTable,
+	tag: &ActivityDataTag,
+	safe: bool,
+) -> Result<Option<JoinHandle<()>>, LuaError> {
+	Ok(match tag {
+		ActivityDataTag::Active => watchtype!(Active, bool, name, send, ctx, env, safe),
+		ActivityDataTag::State => watchtype!(State, String, name, send, ctx, env, safe),
+		ActivityDataTag::Details => watchtype!(Details, String, name, send, ctx, env, safe),
+		ActivityDataTag::Timestamp => watchtype!(Timestamp, Timestamp, name, send, ctx, env, safe),
+		ActivityDataTag::FirstButton => watchtype!(FirstButton, Button, name, send, ctx, env, safe),
+		ActivityDataTag::SecondButton => {
+			watchtype!(SecondButton, Button, name, send, ctx, env, safe)
+		},
+		ActivityDataTag::LargeImage => watchtype!(LargeImage, Image, name, send, ctx, env, safe),
+		ActivityDataTag::SmallImage => watchtype!(SmallImage, Image, name, send, ctx, env, safe),
 	})
 }

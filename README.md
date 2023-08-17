@@ -11,7 +11,7 @@
 [![Crates.io](https://img.shields.io/crates/v/disco-rpc?color=%23f7b679&logo=rust&style=for-the-badge)](https://crates.io/crates/disco-rpc)
 [![Unlicense](https://img.shields.io/crates/l/terny?color=bfdfff&logo=unlicense&style=for-the-badge)](https://unlicense.org/)
 
-Disco is a customisable client for Discord rich presence using 
+Disco is a customisable client for Discord rich presence using
 simple Lua configuration.
 
 </div>
@@ -69,13 +69,16 @@ programme from running and print the location that it would otherwise
 look for a configuration file.
 The other flags that actually affect the programme are:
 
-**-c, --config <CONFIG>**: Overrides the default path to look for configuration.
+**-c, --config <FILE>**: Override the default configuration path.
 <br />
-**-i, --client-id <CLIENT_ID>**: Sets the ID of the application to connect as. Takes precedent over Lua configuration.
+**-i, --application-id <ID>**: Set the ID of the Discord application to connect to.
 <br />
-**-r, --retry-after <DELAY>**: If connecting to Discord fails, retry after DELAY seconds [default: 0]
+**-r, --retry-after <DELAY>**: Retry after a failed connection.
 <br />
-**-q, --quiet**: Don't print any text to the console.
+**-q, --quiet ...**: Disables printing excess information.
+<br />
+**-d, --dry-run**: Parse the config but don't connect to Discord.
+<br />
 
 <a id="configuration" />
 
@@ -151,6 +154,11 @@ returning. Once it stops, the final value remains.
 This example is contrived, but a more complex example can be seen
 in [the example section](#example)
 
+Additionally. As well as assigning a value directly, a function can be
+given which will immediately return the value. This ensured that the
+value is evaluated only once, despite the application having to launch
+multiple Lua VMs.
+
 Disco may also call external lua libraries, however, if that
 library requires C libraries, the `unsafe` feature flag will need to
 be enabled.
@@ -174,9 +182,9 @@ but I have modified it slightly to demonstrate some features that
 I didn't use, such as polling.
 
 ```lua
--- ID of the client I created for ArchLinux via
+-- ID of the application I created for ArchLinux via
 -- https://discord.com/developers/applications
-ClientID = 1137762526541656105
+ApplicationID = 1137762526541656105
 
 -- Display the rich presence
 Active = true
@@ -219,17 +227,6 @@ Button1 = {
 }
 ```
 
-## Before Release
+### The Result
 
-Things that intend to be done before i could be happy calling this a
-1.0.0 project.
-
-- [ ] Provide extra utilitly functions to make some tasks easier.
-- [ ] Test compaility on non x86_64-linux-gnu machines, and fix where possible.
-- [ ] Provide bash, zsh, and fish completions with the releases.
-- [ ] Provide template systemd and potentially runit and openrc services for running on startup.
-- [ ] Fix bugs that are more than likely to show up, and provide friendlier error handling.
-
-None of these goals are particularly quick and easy, so they are
-likely to only end up completed if enough interest is shown in the
-tool.
+![Discord Rich Presence](/etc/images/example.png)

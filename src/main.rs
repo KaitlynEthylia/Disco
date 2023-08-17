@@ -1,13 +1,10 @@
 use std::sync::mpsc;
 use std::time::Duration;
-use std::{env, path::PathBuf};
-use std::{fs, thread};
+use std::{process, thread};
 
-use clap::Parser;
-
-use dirs::config_dir;
 use discord_rich_presence::activity::{Activity, Assets, Button, Timestamps};
 use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+use log::{error, info, warn};
 use mlua::Lua;
 
 use crate::activity::ActivityData;
@@ -16,96 +13,87 @@ use crate::activity::{Button as DiscoButton, Image, Timestamp};
 use crate::lua::create_watcher;
 
 mod activity;
+mod command;
+mod library;
 mod lua;
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Command {
-	/// Overrides the default path to look for configuration.
-	#[arg(short, long)]
-	config: Option<PathBuf>,
-
-	/// Sets the ID of the application to connect as. Takes prescedent over Lua configuration.
-	#[arg(short = 'i', long)]
-	client_id: Option<String>,
-
-	/// If connecting to Discord fails, retry after DELAY seconds.
-	#[arg(short, long, value_name = "DELAY", default_value_t = 0)]
-	retry_after: u64,
-
-	/// Don't print any text to the console.
-	#[arg(short, long)]
-	quiet: bool,
-
-	#[arg(short, long)]
-	print_config_path: bool,
+#[derive(Debug)]
+pub struct Disco {
+	pub retry_after: usize,
+	pub dry_run: bool,
+	pub application_id: Option<u64>,
+	pub config_data: String,
+	#[cfg(feature = "unsafe")]
+	pub safe: bool,
 }
 
-pub fn get_lua() -> Lua {
+pub fn get_lua(#[cfg(feature = "unsafe")] safe: bool) -> Lua {
 	#[cfg(not(feature = "unsafe"))]
-	return Lua::new();
+	let lua = Lua::new();
 	#[cfg(feature = "unsafe")]
-	unsafe {
-		return Lua::unsafe_new();
+	let lua = if !safe {
+		unsafe { Lua::unsafe_new() }
+	} else {
+		Lua::new()
 	};
+	if let Err(_) = lua.load(library::DISCO_LIB).exec() {
+		warn!("Failed to load provided builtin functions, only the Lua standard library will be available");
+	};
+	lua
 }
 
 fn main() {
-	let args = Command::parse();
-	let path = match args.config {
-		Some(path) => path,
-		None => env::var("DISCO_CONFIG")
-			.map(|val| PathBuf::from(val))
-			.unwrap_or(
-				config_dir()
-					.expect(
-						"Could not find a place to look for config. Please
-                    specify a file in the command line or set
-                    DISCO_CONFIG variable.",
-					)
-					.join("disco.lua"),
-			),
+	let args = match command::init() {
+		Some(disco) => disco,
+		None => process::exit(0),
 	};
 
-	if args.print_config_path {
-		println!("{:?}", path);
-		return;
-	}
-
-	let data = fs::read(&path).expect(&format!("Failed to read config file at {path:?}"));
-	let file = String::from_utf8(data).expect("Contents of config file is not valid UTF-8");
-
-	let lua = get_lua();
-	lua.load(&file).exec().unwrap();
+	let lua = get_lua(
+		#[cfg(feature = "unsafe")]
+		args.safe,
+	);
+	lua.load(&args.config_data).exec().unwrap();
 	let env = lua.globals();
 
-	let client_id = match args.client_id {
-		Some(id) => id,
-		None => env
-			.get("ClientID")
-			.expect("No client id available. Set ClientID in {path} or with --client-id"),
+	let application_id = match args.application_id {
+		Some(id) => id.to_string(),
+		None => match env.get("ApplicationID") {
+			Ok(application_id) => application_id,
+			Err(_) => {
+				error!("No application id available. Set ApplicationID in disco.lua or with --application-id");
+				process::exit(0);
+			},
+		},
 	};
 
-	if !args.quiet {
-		println!("Client ID: {client_id}");
-	}
+	info!("Application ID: {application_id}");
 
-	let mut client =
-		DiscordIpcClient::new(&client_id).expect("Failed to create Discord IPC Client");
-	let mut ret = client.connect();
-	match args.retry_after {
-		0 => {
-			if let Err(_) = ret {
-				panic!("Failed to connect to Discord IPC. Please make sure Discord is open.");
-			}
+	let mut client = match args.dry_run {
+		false => Some(
+			DiscordIpcClient::new(&application_id).expect("Failed to create Discord IPC Client"),
+		),
+		true => {
+			info!("Performing dry run. Won't attempt to connect to Discord");
+			None
 		},
-		n => {
-			while let Err(_) = ret {
-				println!("Failed to connect to Discord IPC. Retrying in {n} seconds...");
-				thread::sleep(Duration::from_secs(n));
-				ret = client.connect();
-			}
-		},
+	};
+	if let Some(ref mut client) = client {
+		let mut ret = client.connect();
+		match args.retry_after {
+			0 => {
+				if let Err(_) = ret {
+					error!("Failed to connect to Discord IPC. Please make sure Discord is open.");
+					process::exit(0);
+				}
+			},
+			n => {
+				while let Err(_) = ret {
+					warn!("Failed to connect to Discord IPC. Retrying in {n} seconds...");
+					thread::sleep(Duration::from_secs(n as u64));
+					ret = client.connect();
+				}
+			},
+		};
 	};
 
 	let (send, recv) = mpsc::channel::<ActivityData>();
@@ -122,11 +110,17 @@ fn main() {
 	];
 
 	values.iter().for_each(|(name, ty)| {
-		let ret = create_watcher(name, send.clone(), &file, &env, &ty);
+		let ret = create_watcher(
+			name,
+			send.clone(),
+			&args.config_data,
+			&env,
+			&ty,
+			#[cfg(feature = "unsafe")]
+			args.safe,
+		);
 		if let Err(_) = ret {
-			if !args.quiet {
-				println!("No value for {name}");
-			}
+			warn!("No value for {name}");
 		}
 	});
 
@@ -135,13 +129,13 @@ fn main() {
 	loop {
 		match recv.recv() {
 			Ok(val) => {
-				if !args.quiet {
-					println!("New Value: {val:?}");
-				}
+				info!("New Value: {val:?}");
 				match val {
 					ActivityData::Active(val) => {
-						if !val {
-							let _ = client.clear_activity();
+						if let Some(ref mut client) = client {
+							if !val {
+								let _ = client.clear_activity();
+							}
 						}
 						activity.active = val
 					},
@@ -153,12 +147,12 @@ fn main() {
 					ActivityData::LargeImage(val) => activity.large_image = Some(val),
 					ActivityData::SmallImage(val) => activity.small_image = Some(val),
 				}
-				activity.process(&mut client, args.quiet);
+				if let Some(ref mut client) = client {
+					activity.process(client);
+				}
 			},
 			Err(_) => {
-				if !args.quiet {
-					println!("Exiting...");
-				}
+				info!("Exiting...");
 				break;
 			},
 		}
@@ -191,7 +185,7 @@ impl DiscoActivity {
 		}
 	}
 
-	fn process(&self, client: &mut DiscordIpcClient, quiet: bool) {
+	fn process(&self, client: &mut DiscordIpcClient) {
 		if self.active {
 			let mut activity = Activity::new();
 
@@ -247,9 +241,6 @@ impl DiscoActivity {
 				activity = activity.assets(assets);
 			}
 
-			if !quiet {
-				println!("DEBUG: {self:#?}");
-			}
 			client.set_activity(activity).unwrap();
 		}
 	}

@@ -1,0 +1,23 @@
+#!/sbin/openrc-run
+#
+# NOTE: This is a service for the openrc init system.
+#
+# How to use this service:
+#
+# 1. Place this file in the `/etc/init.d/' directory
+#
+# 2. Start the service
+#
+#      rc-service disco start
+#
+# 3. If everything works as intended, add service to default runlevel as it will
+#    run after boot runlevel
+#
+#      rc-update add disco default
+#
+# The paths below should be absolute paths.
+
+command=/path/to/disco
+command_args="--retry-after <int>"
+command_background="true"
+

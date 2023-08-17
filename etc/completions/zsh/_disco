@@ -1,0 +1,19 @@
+#compdef disco
+
+# Save this file as _exa in /usr/local/share/zsh/site-functions or in any
+# other folder in $fpath.  E.g. save it in a folder called ~/.zfunc and add a
+# line containing `fpath=(~/.zfunc $fpath)` somewhere before `compinit` in your
+# ~/.zshrc.
+
+__disco() {
+    _arguments -s -S \
+        "(- *)"{-V,--version}"[Print version]" \
+        "(- *)"{-h,--help}"[Print help]" \
+		{-c,--config}"[Override the default configuration path.]:(file)" \
+		{-i,--application-id}"[Set the ID of the Discord application to connect to.]:(id)" \
+		{-r,--retry-after}"[Retry after a failed connection.]:(seconds)" \
+		{-q,--quiet}"[Disables printing excess information.]:(quiet):(0 1 2)" \
+		{-p,--print-config-path}"[Print the default configuration location.]" \
+		{-d,--dry-run}"[Parse the config but don't connect to Discord.]"
+}
+__disco

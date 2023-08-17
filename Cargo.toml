@@ -1,17 +1,24 @@
 [package]
 name = "disco-rpc"
-version = "0.1.0"
+version = "0.2.0"
 description = "A customisable client for Discord rich presence using simple Lua configuration."
 authors = ["Kaitlyn~Ethylia <kaitlyyn.ethylia@proton.me>"]
 edition = "2021"
 repository = "https://github.com/KaitlynEthylia/Disco"
 license = "Unlicense"
+exclude = ["/etc/*"]
 
 [dependencies]
-clap = { version = "4.3.19", features = ["derive"] }
+clap = { version = "4.3.21", features = ["derive", "env", "string"] }
 dirs = "5.0.1"
 discord-rich-presence = "0.2.3"
+log = "0.4.20"
 mlua = { version = "0.8.9", features = ["lua54", "send"] }
+simplelog = "0.12.1"
 
 [features]
 unsafe = []
+
+[[bin]]
+name = "disco"
+path = "src/main.rs"

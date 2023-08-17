@@ -1,0 +1,31 @@
+#!/bin/sh
+#
+# NOTE: This is a service for the runit init system!  If you are using
+#       something else (openrc, sysvinit, systemd, ...) then you do not
+#       need to use this file.
+#
+# How to use this service:
+#
+# 1. Place this file in the `/etc/sv/disco' directory.  You will need
+#    to create this directory; this is most easily done with `xmksv'
+#    from the `xtools' package:
+#
+#      xmksv disco
+#
+# 2. Symlink to `/var/service':
+#
+#      ln -s /etc/sv/disco /var/service
+#
+# Note 2: xmksv can create by default a `down` file that disable
+# disco to startup with system, if that happens just delete this file;
+# see [2] for further details.
+#
+# The paths below should be absolute paths.  You can put environment
+# variables in a `conf' file that's in the same directory as this file
+# and refer to them here if you want; see [1] for further details.
+#
+# [1] https://docs.voidlinux.org/config/services/index.html#service-directories
+# [2] https://docs.voidlinux.org/config/services/index.html#enabling-services
+
+exec 1>&2
+exec /path/to/disco --retry-after <int> || exit 1
