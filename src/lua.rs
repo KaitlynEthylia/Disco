@@ -61,7 +61,13 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 				let fun: LuaFunction = lua
 					.globals()
 					.get::<_, LuaTable>(name)
-					.unwrap()
+					.unwrap_or_else(|_| {
+						lua.globals()
+							.get::<_, LuaFunction>(name)
+							.unwrap()
+							.call::<_, LuaTable>(())
+							.unwrap()
+					})
 					.get(2)
 					.unwrap();
 				loop {
@@ -76,7 +82,13 @@ impl<T: Clone + for<'lua> FromLua<'lua> + Send + 'static> Variable<T> {
 					safe,
 				);
 				lua.load(&data).exec().unwrap();
-				let thread: LuaThread = lua.globals().get(name).unwrap();
+				let thread: LuaThread = lua.globals().get(name).unwrap_or_else(|_| {
+					lua.globals()
+						.get::<_, LuaFunction>(name)
+						.unwrap()
+						.call::<_, LuaThread>(())
+						.unwrap()
+				});
 				loop {
 					match thread.resume::<_, Option<T>>(()) {
 						Ok(Some(val)) => dofun(val),

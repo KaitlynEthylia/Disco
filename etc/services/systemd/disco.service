@@ -3,3 +3,6 @@ Description=Disco - Discord Rich Presence client
 
 [Service]
 ExecStart=/path/to/disco --retry-after <int>
+
+[Install]
+WantedBy=default.target
