@@ -77,12 +77,6 @@ fn main() {
 			None
 		},
 	};
-
-	match client {
-		Some(_) => println!("AAA"),
-		None => println!("BBB"),
-	};
-
 	if let Some(ref mut client) = client {
 		let mut ret = client.connect();
 		match args.retry_after {
@@ -192,17 +186,14 @@ impl DiscoActivity {
 	}
 
 	fn process(&self, client: &mut DiscordIpcClient) {
-		println!("processing: {self:#?}");
 		if self.active {
 			let mut activity = Activity::new();
 
 			if let Some(val) = &self.state {
 				activity = activity.state(val);
-				print!("0");
 			}
 			if let Some(val) = &self.details {
 				activity = activity.details(val);
-				print!("1");
 			}
 
 			if let Some(val) = &self.timestamp {
@@ -214,7 +205,6 @@ impl DiscoActivity {
 					timestamps = timestamps.end(val);
 				}
 				activity = activity.timestamps(timestamps);
-				print!("2");
 			}
 
 			let mut buttons = Vec::with_capacity(2);
@@ -222,16 +212,13 @@ impl DiscoActivity {
 			if let Some(val) = &self.button1 {
 				buttons.push(Button::new(&val.text, &val.url));
 				buttons_set = true;
-				print!("3");
 			}
 			if let Some(val) = &self.button2 {
 				buttons.push(Button::new(&val.text, &val.url));
 				buttons_set = true;
-				print!("4");
 			}
 			if buttons_set {
 				activity = activity.buttons(buttons);
-				print!("5");
 			}
 
 			let mut assets = Assets::new();
@@ -242,7 +229,6 @@ impl DiscoActivity {
 				}
 				assets = assets.large_image(&val.asset);
 				assets_set = true;
-				print!("6");
 			}
 			if let Some(val) = &self.small_image {
 				if let Some(val) = &val.text {
@@ -250,16 +236,12 @@ impl DiscoActivity {
 				}
 				assets = assets.small_image(&val.asset);
 				assets_set = true;
-				print!("7");
 			}
 			if assets_set {
 				activity = activity.assets(assets);
-				print!("8");
 			}
 
-			println!("setting activity");
 			client.set_activity(activity).unwrap();
-			print!("9");
 		}
 	}
 }
